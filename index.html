@@ -11,18 +11,31 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Bengali:wght@400;500;600;700&display=swap" rel="stylesheet">
     
+    <!-- PDF জেনারেট করার জন্য jsPDF এবং html2canvas লোড করা হচ্ছে -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    
     <style>
         /* কাস্টম স্টাইল */
         body {
             font-family: 'Noto Sans Bengali', sans-serif;
             background-color: #F3F4F6; /* হালকা ধূসর ব্যাকগ্রাউন্ড */
         }
-        /* প্রিন্ট করার সময় ব্যাকগ্রাউন্ড গ্রাফিক্স দেখানোর জন্য */
-        @media print {
-            body {
-                -webkit-print-color-adjust: exact;
-                print-color-adjust: exact;
+        
+        /* একটি A4 পেইজের মতো দেখতে কন্টেইনার (ডেস্কটপের জন্য) */
+        @media (min-width: 768px) {
+            .form-page-container {
+                max-width: 8.3in; /* A4 width */
+                min-height: 11.7in; /* A4 height */
+                margin: 2rem auto;
+                padding: 1in;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+                border: 1px solid #e0e0e0;
             }
+        }
+
+        /* প্রিন্ট করার সময় বাটন হাইড করার জন্য */
+        @media print {
             .no-print {
                 display: none;
             }
@@ -31,20 +44,20 @@
                 margin: 0;
                 max-width: 100%;
                 border: none;
+                padding: 0.5in; /* প্রিন্টের জন্য প্যাডিং */
             }
         }
-        /* একটি A4 পেইজের মতো দেখতে কন্টেইনার */
+        
+        /* মোবাইলের জন্য কন্টেইনার স্টাইল */
         .form-page-container {
-            max-width: 8.3in; /* A4 width */
-            min-height: 11.7in; /* A4 height */
-            margin: 2rem auto;
-            padding: 1in;
+            width: 100%;
+            margin: 0 auto;
+            padding: 1rem; /* মোবাইলের জন্য কম প্যাডিং */
             background-color: white;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-            border: 1px solid #e0e0e0;
             position: relative;
             overflow: hidden; /* জলছাপকে কন্টেইনারের মধ্যে রাখতে */
         }
+
         /* জলছাপের জন্য কন্টেইনার */
         .watermark {
             position: absolute;
@@ -56,14 +69,17 @@
             pointer-events: none; /* যাতে জলছাপের উপর ক্লিক না করা যায় */
         }
         .watermark img {
-            width: 450px;
+            width: 90vw; /* মোবাইল স্ক্রিনের সাথে অ্যাডজাস্ট হবে */
+            max-width: 450px; /* ডেস্কটপে সর্বোচ্চ ৪৫০px */
             height: auto;
         }
+        
         /* মূল কন্টেন্ট জলছাপের উপরে থাকবে */
         .form-content {
             position: relative;
             z-index: 1;
         }
+        
         /* ছবি রাখার বক্স */
         .photo-box {
             width: 130px;
@@ -76,7 +92,9 @@
             font-size: 0.9rem;
             color: #6b7280;
             background-color: #f9fafb;
+            flex-shrink: 0; /* যাতে বক্সটি ছোট না হয়ে যায় */
         }
+        
         /* ইনপুট ফিল্ডের নিচের বর্ডার */
         .form-input {
             border: none;
@@ -87,202 +105,279 @@
             padding-top: 0.25rem;
             padding-bottom: 0.25rem;
             width: 100%;
+            background-color: transparent; /* ইনপুট ব্যাকগ্রাউন্ড স্বচ্ছ */
         }
         .form-input:focus {
             outline: none;
             box-shadow: none;
             border-bottom: 1px solid #3b82f6;
         }
+        
         /* লেবেল স্টাইল */
         .form-label {
             font-size: 0.95rem;
             font-weight: 500;
             color: #111827;
-            white-space: nowrap;
+            white-space: nowrap; /* লেবেল এক লাইনে থাকবে */
+        }
+
+        /* মোবাইলে ইনপুট ফিল্ড ও লেবেলের অ্যালাইনমেন্ট ঠিক করা */
+        .input-group {
+            display: flex;
+            flex-direction: column; /* মোবাইলে লেবেল উপরে, ইনপুট নিচে */
+            align-items: flex-start;
+            gap: 0.25rem;
+        }
+        /* ডেস্কটপে লেবেল পাশে দেখাবে */
+        @media (min-width: 768px) {
+            .input-group {
+                flex-direction: row;
+                align-items: center;
+            }
+            .form-label {
+                margin-right: 0.5rem; /* লেবেল ও ইনপুটের মাঝে স্পেস */
+            }
         }
     </style>
 </head>
-<body class="bg-gray-100 p-8">
+<body class="bg-gray-100 p-2 md:p-8">
 
     <!-- A4 পেইজের মতো কন্টেইনার -->
-    <div class="form-page-container">
+    <div class="form-page-container" id="form-to-download">
         
         <!-- জলছাপ -->
         <div class="watermark">
-            <!-- এখানে আপনার আপলোড করা লোগোর ফাইল নামটি ব্যবহার করা হয়েছে -->
-            <img src="https://raw.githubusercontent.com/IshtiAK47/CumillaWelfareForm/refs/heads/main/logo.png" 
-                 onerror="this.src='https://raw.githubusercontent.com/IshtiAK47/CumillaWelfareForm/refs/heads/main/logo.png'; this.onerror=null;"
+            <!-- আপনার দেওয়া GitHub লিঙ্ক ব্যবহার করা হয়েছে -->
+            <img src="https://raw.githubusercontent.com/IshtiAK47/CumillaWelfareForm/main/logo.png" 
+                 onerror="this.src='https://placehold.co/400x400/E2E8F0/A0AEC0?text=Watermark'; this.onerror=null;"
                  alt="জলছাপ">
         </div>
 
         <!-- ফরমের মূল কন্টেন্ট -->
         <div class="form-content">
             
-            <!-- হেডার: লোগো, শিরোনাম এবং ছবির বক্স -->
-            <header class="flex justify-between items-start mb-8">
-                <!-- বাম পাশের লোগো -->
-                <div>
-                    <!-- এখানে আপনার আপলোড করা লোগোর ফাইল নামটি ব্যবহার করা হয়েছে -->
-                    <img src="https://raw.githubusercontent.com/IshtiAK47/CumillaWelfareForm/refs/heads/main/logo.png" 
-                         onerror="this.src='https://raw.githubusercontent.com/IshtiAK47/CumillaWelfareForm/refs/heads/main/logo.png'; this.onerror=null;"
+            <!-- হেডার: লোগো, শিরোনাম এবং ছবির বক্স (মোবাইলে ভার্টিক্যাল, ডেস্কটপে হরাইজন্টাল) -->
+            <header class="flex flex-col md:flex-row md:justify-between md:items-start mb-8 items-center text-center md:text-left space-y-4 md:space-y-0">
+                <!-- বাম পাশের লোগো (মোবাইলে প্রথমে) -->
+                <div class="md:order-1">
+                    <img src="https://raw.githubusercontent.com/IshtiAK47/CumillaWelfareForm/main/logo.png" 
+                         onerror="this.src='https://placehold.co/100x100/E2E8F0/A0AEC0?text=Logo'; this.onerror=null;"
                          alt="লোগো" 
                          class="w-24 h-24 rounded-full border border-gray-200">
                 </div>
                 
-                <!-- শিরোনাম -->
-                <div class="text-center mx-4">
+                <!-- শিরোনাম (মোবাইলে দ্বিতীয়) -->
+                <div class="text-center mx-4 md:order-2">
                     <h1 class="text-2xl font-bold text-blue-900">বৃহত্তর কুমিল্লা ছাত্র কল্যাণ সমিতি</h1>
                     <h2 class="text-lg font-semibold text-gray-800">চাঁদপুর বিজ্ঞান ও প্রযুক্তি বিশ্ববিদ্যালয় (চাঁবিপ্রবি)</h2>
                     <h3 class="text-xl font-bold text-green-700 mt-4 underline underline-offset-4">সদস্য ফরম</h3>
                 </div>
                 
-                <!-- ডান পাশে ছবির বক্স -->
-                <div class="photo-box">
+                <!-- ডান পাশে ছবির বক্স (মোবাইলে তৃতীয়) -->
+                <div class="photo-box md:order-3">
                     <span>সদ্য তোলা<br>পাসপোর্ট সাইজের<br>ছবি এখানে আঠা<br>দিয়ে লাগান</span>
                 </div>
             </header>
 
             <!-- মূল ফরম -->
-            <form action="#" method="POST">
-                <div class="space-y-6">
-                    
-                    <!-- ব্যক্তিগত তথ্য -->
-                    <div class="grid grid-cols-1 gap-x-8 gap-y-4 md:grid-cols-2">
-                        <div class="flex items-center col-span-2">
-                            <label for="name-bn" class="form-label mr-2">সদস্যের নাম (বাংলায়):</label>
-                            <input type="text" id="name-bn" class="form-input">
-                        </div>
-                        <div class="flex items-center col-span-2">
-                            <label for="name-en" class="form-label mr-2">সদস্যের নাম (ইংরেজিতে):</label>
-                            <input type="text" id="name-en" class="form-input" style="text-transform: uppercase;">
-                        </div>
-                        <div class="flex items-center">
-                            <label for="father-name" class="form-label mr-2">পিতার নাম:</label>
-                            <input type="text" id="father-name" class="form-input">
-                        </div>
-                        <div class="flex items-center">
-                            <label for="mother-name" class="form-label mr-2">মাতার নাম:</label>
-                            <input type="text" id="mother-name" class="form-input">
-                        </div>
+            <form action="#" method="POST" class="space-y-6">
+                
+                <!-- ব্যক্তিগত তথ্য -->
+                <div class="grid grid-cols-1 gap-x-8 gap-y-6 md:grid-cols-2">
+                    <div class="input-group col-span-1 md:col-span-2">
+                        <label for="name-bn" class="form-label">সদস্যের নাম (বাংলায়):</label>
+                        <input type="text" id="name-bn" class="form-input">
                     </div>
-
-                    <!-- একাডেমিক তথ্য -->
-                    <div class="grid grid-cols-1 gap-x-8 gap-y-4 md:grid-cols-2">
-                        <div class="flex items-center">
-                            <label for="session" class="form-label mr-2">সেশন:</label>
-                            <input type="text" id="session" class="form-input" placeholder="যেমন: ২০২১-২২">
-                        </div>
-                        <div class="flex items-center">
-                            <label for="student-id" class="form-label mr-2">আইডি নং:</label>
-                            <input type="text" id="student-id" class="form-input">
-                        </div>
-                         <div class="flex items-center">
-                            <label for="department" class="form-label mr-2">বিভাগ:</label>
-                            <input type="text" id="department" class="form-input">
-                        </div>
-                        <div class="flex items-center">
-                            <label for="academic-year" class="form-label mr-2">শিক্ষাবর্ষ:</label>
-                            <input type="text" id="academic-year" class="form-input" placeholder="যেমন: ১ম বর্ষ">
-                        </div>
+                    <div class="input-group col-span-1 md:col-span-2">
+                        <label for="name-en" class="form-label">সদস্যের নাম (ইংরেজিতে):</label>
+                        <input type="text" id="name-en" class="form-input" style="text-transform: uppercase;">
                     </div>
-
-                    <!-- অন্যান্য তথ্য -->
-                    <div class="grid grid-cols-1 gap-x-8 gap-y-4 md:grid-cols-3">
-                        <div class="flex items-center">
-                            <label for="dob" class="form-label mr-2">জন্ম তারিখ:</label>
-                            <input type="date" id="dob" class="form-input">
-                        </div>
-                        <div class="flex items-center">
-                            <label for="blood-group" class="form-label mr-2">রক্তের গ্রুপ:</label>
-                            <input type="text" id="blood-group" class="form-input">
-                        </div>
-                        <div class="flex items-center">
-                            <label for="religion" class="form-label mr-2">ধর্ম:</label>
-                            <input type="text" id="religion" class="form-input">
-                        </div>
+                    <div class="input-group">
+                        <label for="father-name" class="form-label">পিতার নাম:</label>
+                        <input type="text" id="father-name" class="form-input">
                     </div>
-                     
-                    <!-- যোগাযোগের তথ্য -->
-                    <div class="grid grid-cols-1 gap-x-8 gap-y-4 md:grid-cols-2">
-                        <div class="flex items-center">
-                            <label for="mobile" class="form-label mr-2">মোবাইল নাম্বার:</label>
-                            <input type="tel" id="mobile" class="form-input">
-                        </div>
-                        <div class="flex items-center">
-                            <label for="email" class="form-label mr-2">ই-মেইল:</label>
-                            <input type="email" id="email" class="form-input">
-                        </div>
+                    <div class="input-group">
+                        <label for="mother-name" class="form-label">মাতার নাম:</label>
+                        <input type="text" id="mother-name" class="form-input">
                     </div>
-
-                    <!-- ঠিকানা -->
-                    <div class="space-y-4">
-                        <fieldset class="border border-gray-400 p-4 rounded">
-                            <legend class="text-lg font-semibold px-2">স্থায়ী ঠিকানা</legend>
-                            <div class="grid grid-cols-1 gap-x-8 gap-y-4 md:grid-cols-2 mt-2">
-                                <div class="flex items-center">
-                                    <label for="perm-village" class="form-label mr-2">গ্রাম/বাসা:</label>
-                                    <input type="text" id="perm-village" class="form-input">
-                                </div>
-                                <div class="flex items-center">
-                                    <label for="perm-po" class="form-label mr-2">ডাকঘর:</label>
-                                    <input type="text" id="perm-po" class="form-input">
-                                </div>
-                                <div class="flex items-center">
-                                    <label for="perm-upazila" class="form-label mr-2">উপজেলা:</label>
-                                    <input type="text" id="perm-upazila" class="form-input">
-                                </div>
-                                <div class="flex items-center">
-                                    <label for="perm-district" class="form-label mr-2">জেলা:</label>
-                                    <input type="text" id="perm-district" class="form-input">
-                                </div>
-                            </div>
-                        </fieldset>
-
-                        <fieldset class="border border-gray-400 p-4 rounded">
-                            <legend class="text-lg font-semibold px-2">বর্তমান ঠিকানা (বিশ্ববিদ্যালয় সংলগ্ন)</legend>
-                            <div class="flex items-center mt-2">
-                                <label for="present-address" class="form-label mr-2">হলের নাম/ম্যাসের ঠিকানা:</label>
-                                <input type="text" id="present-address" class="form-input" placeholder="বিস্তারিত লিখুন...">
-                            </div>
-                        </fieldset>
-                    </div>
-
-                    <!-- অঙ্গীকারনামা -->
-                    <div class="mt-8">
-                        <p class="text-sm">
-                            <strong>অঙ্গীকারনামা:</strong> আমি স্বেচ্ছায়, স্বজ্ঞানে এই মর্মে অঙ্গীকার করছি যে, উপরে বর্ণিত সকল তথ্য সঠিক। আমি সমিতির সকল নিয়ম-কানুন ও শর্তাবলী সম্পর্কে অবগত আছি এবং তা মেনে চলতে বাধ্য থাকবো। আমি সমিতির ভাবমূর্তি ক্ষুণ্ণ হয় এমন কোনো কাজে লিপ্ত হবো না।
-                        </p>
-                    </div>
-
-                    <!-- স্বাক্ষর -->
-                    <div class="flex justify-between items-center mt-24 pt-12">
-                        <div class="text-center">
-                            <span class="border-t-2 border-dotted border-gray-700 px-12 py-1">আবেদনকারীর স্বাক্ষর</span>
-                            <p class="text-sm mt-1">(তারিখ সহ)</p>
-                        </div>
-                        <div class="text-center">
-                            <span class="border-t-2 border-dotted border-gray-700 px-12 py-1">সাধারণ সম্পাদক</span>
-                            <p class="text-sm mt-1">(স্বাক্ষর ও সীল)</p>
-                        </div>
-                        <div class="text-center">
-                            <span class="border-t-2 border-dotted border-gray-700 px-12 py-1">সভাপতি</span>
-                            <p class="text-sm mt-1">(স্বাক্ষর ও সীল)</p>
-                        </div>
-                    </div>
-
                 </div>
+
+                <!-- একাডেমিক তথ্য -->
+                <div class="grid grid-cols-1 gap-x-8 gap-y-6 md:grid-cols-2">
+                    <div class="input-group">
+                        <label for="session" class="form-label">সেশন:</label>
+                        <input type="text" id="session" class="form-input" placeholder="যেমন: ২০২১-২২">
+                    </div>
+                    <div class="input-group">
+                        <label for="student-id" class="form-label">আইডি নং:</label>
+                        <input type="text" id="student-id" class="form-input">
+                    </div>
+                     <div class="input-group">
+                        <label for="department" class="form-label">বিভাগ:</label>
+                        <input type="text" id="department" class="form-input">
+                    </div>
+                    <div class="input-group">
+                        <label for="academic-year" class="form-label">শিক্ষাবর্ষ:</label>
+                        <input type="text" id="academic-year" class="form-input" placeholder="যেমন: ১ম বর্ষ">
+                    </div>
+                </div>
+
+                <!-- অন্যান্য তথ্য -->
+                <div class="grid grid-cols-1 gap-x-8 gap-y-6 md:grid-cols-3">
+                    <div class="input-group">
+                        <label for="dob" class="form-label">জন্ম তারিখ:</label>
+                        <input type="date" id="dob" class="form-input">
+                    </div>
+                    <div class="input-group">
+                        <label for="blood-group" class="form-label">রক্তের গ্রুপ:</label>
+                        <input type="text" id="blood-group" class="form-input">
+                    </div>
+                    <div class="input-group">
+                        <label for="religion" class="form-label">ধর্ম:</label>
+                        <input type="text" id="religion" class="form-input">
+                    </div>
+                </div>
+                 
+                <!-- যোগাযোগের তথ্য -->
+                <div class="grid grid-cols-1 gap-x-8 gap-y-6 md:grid-cols-2">
+                    <div class="input-group">
+                        <label for="mobile" class="form-label">মোবাইল নাম্বার:</label>
+                        <input type="tel" id="mobile" class="form-input">
+                    </div>
+                    <div class="input-group">
+                        <label for="email" class="form-label">ই-মেইল:</label>
+                        <input type="email" id="email" class="form-input">
+                    </div>
+                </div>
+
+                <!-- ঠিকানা -->
+                <div class="space-y-4">
+                    <fieldset class="border border-gray-400 p-4 rounded">
+                        <legend class="text-lg font-semibold px-2">স্থায়ী ঠিকানা</legend>
+                        <div class="grid grid-cols-1 gap-x-8 gap-y-6 md:grid-cols-2 mt-2">
+                            <div class="input-group">
+                                <label for="perm-village" class="form-label">গ্রাম/বাসা:</label>
+                                <input type="text" id="perm-village" class="form-input">
+                            </div>
+                            <div class="input-group">
+                                <label for="perm-po" class="form-label">ডাকঘর:</label>
+                                <input type="text" id="perm-po" class="form-input">
+                            </div>
+                            <div class="input-group">
+                                <label for="perm-upazila" class="form-label">উপজেলা:</label>
+                                <input type="text" id="perm-upazila" class="form-input">
+                            </div>
+                            <div class="input-group">
+                                <label for="perm-district" class="form-label">জেলা:</label>
+                                <input type="text" id="perm-district" class="form-input">
+                            </div>
+                        </div>
+                    </fieldset>
+
+                    <fieldset class="border border-gray-400 p-4 rounded">
+                        <legend class="text-lg font-semibold px-2">বর্তমান ঠিকানা (বিশ্ববিদ্যালয় সংলগ্ন)</legend>
+                        <div class="input-group mt-2">
+                            <label for="present-address" class="form-label">হলের নাম/ম্যাসের ঠিকানা:</label>
+                            <input type="text" id="present-address" class="form-input" placeholder="বিস্তারিত লিখুন...">
+                        </div>
+                    </fieldset>
+                </div>
+
+                <!-- অঙ্গীকারনামা -->
+                <div class="mt-8">
+                    <p class="text-sm">
+                        <strong>অঙ্গীকারনামা:</strong> আমি স্বেচ্ছায়, স্বজ্ঞানে এই মর্মে অঙ্গীকার করছি যে, উপরে বর্ণিত সকল তথ্য সঠিক। আমি সমিতির সকল নিয়ম-কানুন ও শর্তাবলী সম্পর্কে অবগত আছি এবং তা মেনে চলতে বাধ্য থাকবো। আমি সমিতির ভাবমূর্তি ক্ষুণ্ণ হয় এমন কোনো কাজে লিপ্ত হবো না।
+                    </p>
+                </div>
+
+                <!-- স্বাক্ষর -->
+                <div class="flex flex-col md:flex-row md:justify-between md:items-center mt-24 pt-12 space-y-12 md:space-y-0">
+                    <div class="text-center">
+                        <span class="border-t-2 border-dotted border-gray-700 px-12 py-1">আবেদনকারীর স্বাক্ষর</span>
+                        <p class="text-sm mt-1">(তারিখ সহ)</p>
+                    </div>
+                    <div class="text-center">
+                        <span class="border-t-2 border-dotted border-gray-700 px-12 py-1">সাধারণ সম্পাদক</span>
+                        <p class="text-sm mt-1">(স্বাক্ষর ও সীল)</p>
+                    </div>
+                    <div class="text-center">
+                        <span class="border-t-2 border-dotted border-gray-700 px-12 py-1">সভাপতি</span>
+                        <p class="text-sm mt-1">(স্বাক্ষর ও সীল)</p>
+                    </div>
+                </div>
+
             </form>
-
-            <!-- প্রিন্ট বাটন -->
-            <div class="text-center mt-12 no-print">
-                <button onclick="window.print()" class="bg-blue-600 text-white px-6 py-2 rounded-lg font-semibold hover:bg-blue-700 transition-colors">
-                    ফরমটি প্রিন্ট করুন
-                </button>
-            </div>
-
         </div>
     </div>
 
-</body>
+    <!-- ডাউনলোড বাটন -->
+    <div class="text-center my-8 no-print">
+        <button id="download-btn" class="bg-blue-600 text-white px-6 py-2 rounded-lg font-semibold hover:bg-blue-700 transition-colors">
+            Download as PDF
+        </button>
+        <p class="text-sm text-gray-600 mt-2">
+            (ডাউনলোড শুরু হতে কয়েক সেকেন্ড সময় লাগতে পারে)
+        </p>
+    </div>
 
+    <script>
+        // PDF ডাউনলোড ফাংশন
+        async function downloadPDF() {
+            // jsPDF লাইব্রেরি লোড করা
+            const { jsPDF } = window.jspdf;
+            const downloadButton = document.getElementById('download-btn');
+            
+            // বাটন টেক্সট পরিবর্তন করে লোডিং দেখানো
+            downloadButton.disabled = true;
+            downloadButton.innerText = 'ডাউনলোড হচ্ছে...';
+
+            const formElement = document.getElementById('form-to-download');
+            
+            try {
+                // html2canvas দিয়ে ফরমের স্ক্রিনশট নেওয়া
+                const canvas = await html2canvas(formElement, {
+                    scale: 2, // রেজুলেশন বাড়ানোর জন্য
+                    useCORS: true // যদি কোনো এক্সটার্নাল ইমেজ থাকে
+                });
+                
+                const imgData = canvas.toDataURL('image/png');
+                
+                // PDF ডাইমেনশন সেট করা (A4)
+                const pdf = new jsPDF('p', 'mm', 'a4');
+                const pdfWidth = pdf.internal.pageSize.getWidth();
+                const pdfHeight = pdf.internal.pageSize.getHeight();
+                
+                // ক্যানভাস ডাইমেনশন
+                const canvasWidth = canvas.width;
+                const canvasHeight = canvas.height;
+                
+                // রেশিও ঠিক রেখে ইমেজকে PDF পেইজে ফিট করা
+                const ratio = Math.min(pdfWidth / canvasWidth, pdfHeight / canvasHeight);
+                const imgWidth = canvasWidth * ratio;
+                const imgHeight = canvasHeight * ratio;
+
+                // PDF এ ইমেজ যোগ করা (সেন্টার অ্যালাইন)
+                const x = (pdfWidth - imgWidth) / 2;
+                const y = 0; // উপরে থেকে শুরু
+                
+                pdf.addImage(imgData, 'PNG', x, y, imgWidth, imgHeight);
+                
+                // PDF সেভ করা
+                pdf.save('Sodosso_Form_Comilla_Samiti.pdf');
+
+            } catch (error) {
+                console.error("PDF তৈরিতে সমস্যা হয়েছে: ", error);
+                alert("দুঃখিত, PDF তৈরি করা সম্ভব হয়নি।");
+            } finally {
+                // বাটনকে আগের অবস্থায় ফিরিয়ে আনা
+                downloadButton.disabled = false;
+                downloadButton.innerText = 'Download as PDF';
+            }
+        }
+
+        // বাটনে ক্লিক ইভেন্ট যোগ করা
+        document.getElementById('download-btn').addEventListener('click', downloadPDF);
+    </script>
+
+</body>
 </html>
